@@ -1,0 +1,60 @@
+name: Daily Signin
+
+on:
+  schedule:
+    # 配置两个时间点（都是UTC时间）
+    # 1. 每天 UTC 01:00（北京时间 09:00）
+    - cron: '0 1 * * *'
+    # 2. 每天 UTC 13:00（北京时间 21:00）
+    - cron: '0 13 * * *'
+    
+  # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      manual:
+        description: '手动执行签到'
+        required: false
+        default: 'true'
+
+  # 推送代码时也可以触发（可选）
+  push:
+    branches: [ main, master ]
+
+jobs:
+  daily-signin:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 输出当前时间
+      run: |
+        echo "当前UTC时间: $(date -u)"
+        echo "当前北京时间: $(TZ=Asia/Shanghai date)"
+        echo "任务开始执行..."
+      
+    - name: 执行签到
+      run: |
+        echo "正在访问签到页面 https://tb.chaizi.cc/do.php ..."
+        # 使用curl访问签到页面，并获取HTTP状态码
+        RESPONSE=$(curl -s -o /dev/null -w "HTTP状态码: %{http_code}, 总耗时: %{time_total}秒" "https://tb.chaizi.cc/do.php")
+        echo "签到结果: $RESPONSE"
+        
+        # 如果需要查看响应内容，可以使用这个命令（但会输出到控制台）
+        # curl -s "https://tb.chaizi.cc/do.php" | head -c 500
+        
+        # 保存结果到日志文件
+        echo "$(date -u '+%Y-%m-%d %H:%M:%S UTC'): $RESPONSE" >> signin_log.txt
+        echo "$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S CST'): $RESPONSE" >> signin_log.txt
+        echo "---" >> signin_log.txt
+        
+    - name: 查看日志内容
+      run: |
+        echo "最近5次签到记录:"
+        tail -n 15 signin_log.txt || echo "暂无日志"
+        
+    - name: 上传签到日志
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: signin-logs
+        path: signin_log.txt
+        retention-days: 7
